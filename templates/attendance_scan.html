@@ -1,0 +1,277 @@
+{% extends 'base.html' %}
+{% block title %}Attendance Scanner{% endblock %}
+{% block header %}Attendance Scanner{% endblock %}
+{% block content %}
+<div class="page-head scanner-page-head">
+  <div>
+    <h1>Attendance Scanner</h1>
+    <p>Look at the camera and scan your attendance.</p>
+  </div>
+  <span id="dayBadge" class="badge badge-yellow">Checking…</span>
+</div>
+
+<div class="scanner-wrap">
+  <div class="card scanner-card">
+    <div class="camera-stage">
+      <video id="video" autoplay playsinline muted></video>
+      <div id="cameraState" class="camera-state">Starting camera…</div>
+    </div>
+    <div class="actions" style="margin-top:14px">
+      <button id="scan" class="btn btn-success" style="flex:1" disabled>◉ Scan &amp; Mark Attendance</button>
+    </div>
+    <div id="message" class="scanner-toast-host" aria-live="polite" aria-atomic="true"></div>
+  </div>
+</div>
+
+<style>
+  .scanner-page-head { margin-bottom: 16px; }
+  .scanner-page-head h1 { margin-bottom: 4px; }
+  .scanner-page-head p { margin: 0; }
+  .scanner-wrap { max-width: 760px; margin: 0 auto; }
+  .scanner-card { padding: 18px; position: relative; }
+  .camera-stage {
+    position: relative;
+    aspect-ratio: 4 / 3;
+    overflow: hidden;
+    border-radius: 14px;
+    background: #111;
+  }
+  .camera-stage video {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: cover;
+    background: #111;
+  }
+  .camera-state {
+    position: absolute;
+    left: 14px;
+    bottom: 14px;
+    padding: 7px 11px;
+    border-radius: 999px;
+    background: rgba(17, 24, 39, .78);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    backdrop-filter: blur(6px);
+  }
+  .camera-state.ready { background: rgba(15, 157, 88, .9); }
+  .camera-state.error { background: rgba(217, 48, 37, .9); }
+
+  .scanner-card .actions { margin-top: 12px !important; }
+  .scanner-card #scan { min-height: 48px; font-size: 15px; }
+
+  .scanner-toast-host {
+    position: fixed;
+    top: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 9999;
+    width: min(560px, calc(100vw - 32px));
+    pointer-events: none;
+  }
+  .scanner-toast {
+    position: relative;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    grid-template-rows: auto auto;
+    column-gap: 13px;
+    row-gap: 10px;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 16px 18px 14px;
+    border-radius: 14px;
+    box-shadow: 0 14px 34px rgba(24, 35, 70, .22);
+    font-weight: 600;
+    line-height: 1.35;
+    opacity: 0;
+    transform: translateY(-18px) scale(.98);
+    transition: opacity .22s ease, transform .22s ease;
+    overflow: hidden;
+  }
+  .scanner-toast.is-visible { opacity: 1; transform: translateY(0) scale(1); }
+  .scanner-toast-ok { background: #0f9d58; color: #fff; }
+  .scanner-toast-late { background: #f6b800; color: #3d2d00; }
+  .scanner-toast-err { background: #d93025; color: #fff; }
+  .scanner-toast-info { background: #1a73e8; color: #fff; }
+  .scanner-toast-icon {
+    display: inline-grid; place-items: center; width: 30px; height: 30px;
+    border-radius: 50%; background: rgba(255,255,255,.18); font-weight: 800;
+    font-size: 16px; grid-column: 1; grid-row: 1;
+  }
+  .scanner-toast-content { min-width: 0; grid-column: 2; grid-row: 1; }
+  .scanner-toast-title { font-size: 15px; font-weight: 800; margin-bottom: 2px; }
+  .scanner-toast-body { font-size: 13px; font-weight: 500; opacity: .96; overflow-wrap: anywhere; }
+  .scanner-toast-close {
+    grid-column: 3; grid-row: 1; border: 0; background: transparent; color: inherit;
+    opacity: .82; font-size: 20px; line-height: 1; padding: 2px 0 0 8px; cursor: pointer;
+  }
+  .scanner-toast-track {
+    grid-column: 1 / -1; grid-row: 2; height: 5px; border-radius: 999px;
+    background: rgba(255,255,255,.26); overflow: hidden;
+  }
+  .scanner-toast-progress {
+    height: 100%; width: 100%; border-radius: inherit; background: currentColor;
+    opacity: .9; transform-origin: left center; animation: scanner-toast-countdown 4.2s linear forwards;
+  }
+  .scanner-toast-late .scanner-toast-progress { background: #7a5600; }
+  @keyframes scanner-toast-countdown { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+  @media (max-width: 620px) {
+    .scanner-toast-host { top: 14px; width: min(560px, calc(100vw - 20px)); }
+    .scanner-toast { padding: 14px 14px 12px; column-gap: 10px; }
+  }
+  @media (prefers-reduced-motion: reduce) { .scanner-toast { transition: none; } }
+</style>
+
+<script>
+(() => {
+  let stream = null;
+  let scanning = false;
+  let toastTimer = null;
+  const video = document.getElementById('video');
+  const btn = document.getElementById('scan');
+  const msg = document.getElementById('message');
+  const day = document.getElementById('dayBadge');
+  const cameraState = document.getElementById('cameraState');
+  const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+  function show(text, kind, duration = 4200, title = null) {
+    clearTimeout(toastTimer);
+    const meta = {
+      ok: {icon: '✓', title: title || 'Attendance Marked Present!'},
+      late: {icon: '◷', title: title || 'Attendance Marked Late!'},
+      err: {icon: '!', title: title || 'Attendance Not Marked'},
+      info: {icon: 'i', title: title || 'Information'}
+    }[kind] || {icon: 'i', title: title || 'Information'};
+
+    msg.className = `scanner-toast scanner-toast-${kind} is-visible`;
+    msg.innerHTML = `
+      <span class="scanner-toast-icon">${meta.icon}</span>
+      <div class="scanner-toast-content">
+        <div class="scanner-toast-title">${meta.title}</div>
+        <div class="scanner-toast-body">${String(text || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}</div>
+      </div>
+      <button type="button" class="scanner-toast-close" aria-label="Dismiss notification">×</button>
+      <div class="scanner-toast-track" aria-hidden="true"><div class="scanner-toast-progress"></div></div>
+    `;
+
+    msg.querySelector('.scanner-toast-close')?.addEventListener('click', () => {
+      clearTimeout(toastTimer);
+      msg.classList.remove('is-visible');
+    }, {once: true});
+
+    if (duration > 0) {
+      const progress = msg.querySelector('.scanner-toast-progress');
+      progress.style.animationDuration = `${duration}ms`;
+      toastTimer = setTimeout(() => msg.classList.remove('is-visible'), duration);
+    }
+  }
+
+  async function readJSON(response) {
+    try { return await response.json(); }
+    catch { return {error: `Server returned HTTP ${response.status}`}; }
+  }
+
+  async function checkSchoolDay() {
+    try {
+      const r = await fetch('/api/school-day', {cache: 'no-store'});
+      const x = await readJSON(r);
+      if (!r.ok) throw new Error(x.error || `HTTP ${r.status}`);
+      if (x.is_working) {
+        day.className = 'badge badge-green';
+        day.textContent = x.using_override ? `Working day • Test ${x.time}` : 'Working day';
+        if (stream && video.videoWidth > 0) btn.disabled = false;
+      } else {
+        day.className = 'badge badge-gray';
+        day.textContent = 'Non-working day';
+        btn.disabled = true;
+        show('Attendance is disabled because today is non-working in the school calendar.', 'info');
+      }
+    } catch (error) {
+      day.className = 'badge badge-red';
+      day.textContent = 'Calendar unavailable';
+      btn.disabled = !(stream && video.videoWidth > 0);
+      show('School calendar could not be checked. Using the normal school-day default.', 'info');
+    }
+  }
+
+  function waitForVideoReady(timeout = 8000) {
+    if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth && video.videoHeight) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('Camera did not finish starting. Please try again.')), timeout);
+      video.addEventListener('loadeddata', () => { clearTimeout(timer); resolve(); }, {once: true});
+    });
+  }
+
+  async function start() {
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) throw new Error('This browser does not support camera access.');
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: {width: {ideal: 640}, height: {ideal: 480}, facingMode: 'user'},
+        audio: false
+      });
+      video.srcObject = stream;
+      await video.play();
+      await waitForVideoReady();
+      cameraState.textContent = 'Camera ready';
+      cameraState.className = 'camera-state ready';
+      await checkSchoolDay();
+    } catch (error) {
+      cameraState.textContent = 'Camera unavailable';
+      cameraState.className = 'camera-state error';
+      show('Camera access is required: ' + error.message, 'err');
+      btn.disabled = true;
+    }
+  }
+
+  function frame() {
+    if (!video.videoWidth || !video.videoHeight) throw new Error('Camera frame is not ready yet.');
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const context = canvas.getContext('2d', {willReadFrequently: false});
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL('image/jpeg', .94);
+  }
+
+  async function scan() {
+    if (scanning || !stream) return;
+    scanning = true;
+    btn.disabled = true;
+    show('Scanning…', 'info');
+    try {
+      await waitForVideoReady();
+      // Keep the current V6 recognition endpoint; only the presentation is restored to the old UI.
+      const image = frame();
+      const r = await fetch('/api/attendance/recognize', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({image})
+      });
+      const d = await readJSON(r);
+      if (!r.ok) {
+        show(d.error || 'Recognition failed.', 'err');
+        return;
+      }
+      if (!d.matched) {
+        show('No matching student found. Try again with better lighting and one face in view.', 'err');
+        return;
+      }
+      const isLate = String(d.status || '').toLowerCase() === 'late';
+      const already = d.already_marked ? ' No duplicate record was created.' : '';
+      show(`${d.student} — ${d.status}.${already}`, isLate ? 'late' : 'ok', 4200,
+           isLate ? 'Attendance Marked Late!' : 'Attendance Marked Present!');
+    } catch (error) {
+      show(error.message || 'Scanner error. Please try again.', 'err');
+    } finally {
+      scanning = false;
+      await checkSchoolDay();
+    }
+  }
+
+  btn.addEventListener('click', scan);
+  start();
+  window.addEventListener('beforeunload', () => stream?.getTracks().forEach(track => track.stop()));
+})();
+</script>
+{% endblock %}

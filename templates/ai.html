@@ -1,0 +1,12 @@
+{% extends 'base.html' %}{% block title %}School AI{% endblock %}{% block header %}School AI{% endblock %}{% block content %}
+<div class="hero"><h1>School AI</h1><p class="muted">Answers stay inside your role. Attendance questions can also use built-in school analytics when no OpenAI key is configured.</p></div>
+<div class="card" style="margin-top:16px">
+  <div id="chat" class="chat-box"><div class="chat-hint">Try: “How many students have less than 75% attendance?”</div></div>
+  <form id="chat-form" class="actions" style="margin-top:12px"><input id="q" style="flex:1;padding:11px;border:1px solid #d8dee7;border-radius:9px;background:#fff" placeholder="Ask about attendance, results or your allowed school data..." autocomplete="off"><button id="askBtn" class="btn btn-primary" type="submit">Ask</button></form>
+  <div id="ai-status" class="small muted" style="margin-top:8px"></div>
+</div>
+<script>
+const form=document.getElementById('chat-form'); const q=document.getElementById('q'); const chat=document.getElementById('chat'); const btn=document.getElementById('askBtn'); const status=document.getElementById('ai-status');
+function addMessage(label,text,kind){const p=document.createElement('p');p.className='chat-message '+(kind||'');const b=document.createElement('strong');b.textContent=label+': ';p.appendChild(b);p.appendChild(document.createTextNode(text));chat.appendChild(p);chat.scrollTop=chat.scrollHeight;}
+form.addEventListener('submit',async e=>{e.preventDefault();const message=q.value.trim();if(!message)return;addMessage('You',message,'user');q.value='';btn.disabled=true;status.textContent='Thinking…';try{const r=await fetch('{{url_for('ai_api')}}',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message})});const d=await r.json().catch(()=>({}));if(!r.ok) addMessage('AI',d.error||('Request failed ('+r.status+').'),'error'); else addMessage('AI',d.answer||'No answer returned.','assistant');}catch(err){addMessage('AI','Could not reach the AI service. Check the server connection.','error');}finally{btn.disabled=false;status.textContent='';q.focus();}});
+</script>{% endblock %}

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Announcements • DAV PS KKP</title>
+<link rel="icon" href="{{ url_for('static',filename='branding/dav-ps-kkp-logo.png') }}">
+<link rel="stylesheet" href="{{ url_for('static',filename='app.css') }}">
+</head>
+<body>
+<div class="login" style="min-height:100vh;align-items:flex-start;padding-top:50px">
+  <div class="login-card" style="max-width:760px;width:min(760px,94vw)">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+      <div class="brand" style="padding:0;color:#15365a;display:flex;align-items:center;gap:12px">
+        <img src="{{ url_for('static',filename='branding/dav-ps-kkp-logo.png') }}" alt="DAV PS KKP" style="width:48px;height:48px;object-fit:contain;border-radius:9px;background:#fff">
+        <div><strong style="display:block">DAV PS KKP</strong><small style="display:block;font-size:11px;color:#758195;margin-top:2px">School Announcements</small></div>
+      </div>
+      <a class="btn btn-primary" href="{{ url_for('login') }}">Sign in</a>
+    </div>
+    <div class="hero" style="margin-top:22px"><div class="eyebrow">Public notice board</div><h2>📢 Announcements</h2><p class="muted">{% if logged_in %}Announcements published for your role are shown here.{% else %}Only announcements published for the public school notice board are shown here. No login is required.{% endif %}</p></div>
+    <div class="card" style="margin-top:18px;box-shadow:none">
+      {% for a in announcements %}
+      <article style="padding:15px 0;border-bottom:1px solid var(--line)">
+        <h3 style="margin:0 0 5px">{{ a.title }}</h3>
+        <div class="small muted">{{ a.published_at.strftime('%d.%m.%Y %I:%M %p') if a.published_at else '' }}</div>
+        <p style="margin:9px 0 0;line-height:1.6">{{ a.message }}</p>
+      </article>
+      {% else %}
+      <div class="empty">No public announcements have been published yet.</div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sign in • DAV PS KKP</title><link rel="stylesheet" href="{{ url_for('static',filename='app.css') }}"></head>
+<body>
+<div class="login">
+  <form class="login-card" method="post" autocomplete="on">
+    <div class="login-mark">⌂</div>
+    <div class="eyebrow">DAV PS KKP</div>
+    <h1 style="margin:5px 0 3px">Welcome back</h1>
+    <p class="muted" style="margin-top:0">Sign in to the school management system.</p>
+    {% if error %}<div class="alert error">{{error}}</div>{% endif %}
+    <div class="field"><label>Username</label><input name="username" autocomplete="username" autofocus required></div>
+    <div class="field" style="margin-top:12px"><label>Password</label><input name="password" type="password" autocomplete="current-password" required></div>
+    <button class="btn btn-primary" style="width:100%;margin-top:16px">Sign in</button>
+    <div class="actions" style="justify-content:space-between;margin-top:10px"><a class="small" href="{{url_for('student_self_register')}}">New student? Register here</a><a class="small" href="{{url_for('announcements_view')}}">Public announcements</a></div>
+    <p class="small muted" style="margin:13px 0 0">First-time accounts must set a new username and password before using the system.</p>
+  </form>
+</div>
+</body></html>
